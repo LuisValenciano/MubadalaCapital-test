@@ -1,60 +1,43 @@
-'use client'
 import Link from 'next/link'
-import { funds, Fund, FundGroup } from '@/lib/mock-data'
+import { FundRow, FundGroup } from '@/lib/all-funds-data'
 
 const fmt = (n: number, dec = 0) =>
   n === 0 ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 
-const fmtX = (n: number) => (n === 0 ? '—' : `${n.toFixed(2)}x`)
-const fmtPct = (n: number) => (n === 0 ? '—' : `${n.toFixed(1)}%`)
+const fmtX = (n: number | null) => (n == null || n === 0 ? '—' : `${n.toFixed(2)}x`)
+const fmtPct = (n: number | null) => (n == null || n === 0 ? '—' : `${n.toFixed(1)}%`)
 
-function sumField(arr: Fund[], field: keyof Fund): number {
-  return arr.reduce((s, f) => s + (f[field] as number), 0)
-}
-
-function weightedMean(arr: Fund[], valField: keyof Fund, weightField: keyof Fund): number {
-  const totalW = arr.reduce((s, f) => s + (f[weightField] as number), 0)
-  if (totalW === 0) return 0
-  return arr.reduce((s, f) => s + (f[valField] as number) * (f[weightField] as number), 0) / totalW
+function sumField(arr: FundRow[], field: keyof FundRow): number {
+  return arr.reduce((s, f) => s + ((f[field] as number) ?? 0), 0)
 }
 
 interface GroupRowsProps {
   group: FundGroup
-  groupFunds: Fund[]
+  groupFunds: FundRow[]
   rowStart: number
 }
 
 function GroupRows({ group, groupFunds, rowStart }: GroupRowsProps) {
-  const total = {
+  const called = sumField(groupFunds, 'totalCalled')
+  const distributed = sumField(groupFunds, 'distributed')
+  const totalValue = sumField(groupFunds, 'totalValue')
+
+  const subtotal = {
     fundSize: sumField(groupFunds, 'fundSize'),
-    totalCalled: sumField(groupFunds, 'totalCalled'),
-    distributed: sumField(groupFunds, 'distributed'),
+    totalCalled: called,
+    distributed,
     adjustedNAV: sumField(groupFunds, 'adjustedNAV'),
-    totalValue: sumField(groupFunds, 'totalValue'),
-    netDPI: groupFunds[0].totalCalled > 0
-      ? sumField(groupFunds, 'distributed') / sumField(groupFunds, 'totalCalled')
-      : 0,
-    netMOIC: sumField(groupFunds, 'totalCalled') > 0
-      ? sumField(groupFunds, 'totalValue') / sumField(groupFunds, 'totalCalled')
-      : 0,
-    netIRR: weightedMean(groupFunds, 'netIRR', 'totalCalled'),
-    grossDPI: sumField(groupFunds, 'totalCalled') > 0
-      ? sumField(groupFunds, 'distributed') / sumField(groupFunds, 'totalCalled')
-      : 0,
-    grossMOIC: sumField(groupFunds, 'totalCalled') > 0
-      ? sumField(groupFunds, 'totalValue') / sumField(groupFunds, 'totalCalled')
-      : 0,
-    grossIRR: weightedMean(groupFunds, 'grossIRR', 'totalCalled'),
+    totalValue,
+    netDPI: called > 0 ? distributed / called : null,
+    netMOIC: called > 0 ? totalValue / called : null,
   }
 
   return (
     <>
-      {/* Group header */}
       <tr className="row-group-header">
-        <td colSpan={14}>{group} Funds</td>
+        <td colSpan={11}>{group} Funds</td>
       </tr>
 
-      {/* Fund rows */}
       {groupFunds.map((fund, i) => (
         <tr
           key={fund.id}
@@ -76,51 +59,47 @@ function GroupRows({ group, groupFunds, rowStart }: GroupRowsProps) {
           <td className="text-right">{fmt(fund.distributed)}</td>
           <td className="text-right">{fmt(fund.adjustedNAV)}</td>
           <td className="text-right font-semibold">{fmt(fund.totalValue)}</td>
-          <td className="text-right">{fmtX(fund.netDPI)}</td>
-          <td className="text-right font-semibold">{fmtX(fund.netMOIC)}</td>
-          <td className="text-right">{fmtPct(fund.netIRR)}</td>
-          <td className="text-right">{fmtX(fund.grossDPI)}</td>
-          <td className="text-right font-semibold">{fmtX(fund.grossMOIC)}</td>
           <td className="text-right">{fmtPct(fund.grossIRR)}</td>
+          <td className="text-right">{fmtPct(fund.netIRR)}</td>
+          <td className="text-right">{fmtX(fund.grossMOIC)}</td>
+          <td className="text-right">{fmtX(fund.netMOIC)}</td>
         </tr>
       ))}
 
-      {/* Group subtotal */}
       <tr className="row-subtotal">
         <td colSpan={2}>{group} Total</td>
-        <td className="text-right">{fmt(total.fundSize)}</td>
-        <td className="text-right">{fmt(total.totalCalled)}</td>
-        <td className="text-right">{fmt(total.distributed)}</td>
-        <td className="text-right">{fmt(total.adjustedNAV)}</td>
-        <td className="text-right">{fmt(total.totalValue)}</td>
-        <td className="text-right">{fmtX(total.netDPI)}</td>
-        <td className="text-right">{fmtX(total.netMOIC)}</td>
-        <td className="text-right">{fmtPct(total.netIRR)}</td>
-        <td className="text-right">{fmtX(total.grossDPI)}</td>
-        <td className="text-right">{fmtX(total.grossMOIC)}</td>
-        <td className="text-right">{fmtPct(total.grossIRR)}</td>
+        <td className="text-right">{fmt(subtotal.fundSize)}</td>
+        <td className="text-right">{fmt(subtotal.totalCalled)}</td>
+        <td className="text-right">{fmt(subtotal.distributed)}</td>
+        <td className="text-right">{fmt(subtotal.adjustedNAV)}</td>
+        <td className="text-right">{fmt(subtotal.totalValue)}</td>
+        <td className="text-right">—</td>
+        <td className="text-right">—</td>
+        <td className="text-right">—</td>
+        <td className="text-right">{fmtX(subtotal.netMOIC)}</td>
       </tr>
     </>
   )
 }
 
-export default function FundsTable() {
+interface FundsTableProps {
+  funds: FundRow[]
+}
+
+export default function FundsTable({ funds }: FundsTableProps) {
   const groups: FundGroup[] = ['Flagship', 'Continuation', 'Co-Investment']
+
+  const totalCalled = sumField(funds, 'totalCalled')
+  const totalDistributed = sumField(funds, 'distributed')
+  const totalValue = sumField(funds, 'totalValue')
 
   const grandTotal = {
     fundSize: sumField(funds, 'fundSize'),
-    totalCalled: sumField(funds, 'totalCalled'),
-    distributed: sumField(funds, 'distributed'),
+    totalCalled,
+    distributed: totalDistributed,
     adjustedNAV: sumField(funds, 'adjustedNAV'),
-    totalValue: sumField(funds, 'totalValue'),
-    netMOIC: sumField(funds, 'totalCalled') > 0
-      ? sumField(funds, 'totalValue') / sumField(funds, 'totalCalled')
-      : 0,
-    netIRR: weightedMean(funds, 'netIRR', 'totalCalled'),
-    grossMOIC: sumField(funds, 'totalCalled') > 0
-      ? sumField(funds, 'totalValue') / sumField(funds, 'totalCalled')
-      : 0,
-    grossIRR: weightedMean(funds, 'grossIRR', 'totalCalled'),
+    totalValue,
+    netMOIC: totalCalled > 0 ? totalValue / totalCalled : null,
   }
 
   let rowIdx = 0
@@ -137,17 +116,16 @@ export default function FundsTable() {
               <th className="text-right">Distributed</th>
               <th className="text-right">Adj. NAV</th>
               <th className="text-right">Total Value</th>
-              <th className="text-right">Net DPI</th>
-              <th className="text-right">Net MOIC</th>
-              <th className="text-right">Net IRR</th>
-              <th className="text-right">Gross DPI</th>
-              <th className="text-right">Gross MOIC</th>
               <th className="text-right">Gross IRR</th>
+              <th className="text-right">Net IRR</th>
+              <th className="text-right">Gross MOIC</th>
+              <th className="text-right">Net MOIC</th>
             </tr>
           </thead>
           <tbody>
             {groups.map((group) => {
               const groupFunds = funds.filter((f) => f.group === group)
+              if (groupFunds.length === 0) return null
               const startIdx = rowIdx
               rowIdx += groupFunds.length
               return (
@@ -160,7 +138,6 @@ export default function FundsTable() {
               )
             })}
 
-            {/* Grand Total */}
             <tr className="row-subtotal" style={{ backgroundColor: '#00695C' }}>
               <td colSpan={2} className="text-base">TOTAL PORTFOLIO</td>
               <td className="text-right">{fmt(grandTotal.fundSize)}</td>
@@ -169,19 +146,17 @@ export default function FundsTable() {
               <td className="text-right">{fmt(grandTotal.adjustedNAV)}</td>
               <td className="text-right">{fmt(grandTotal.totalValue)}</td>
               <td className="text-right">—</td>
-              <td className="text-right">{fmtX(grandTotal.netMOIC)}</td>
-              <td className="text-right">{fmtPct(grandTotal.netIRR)}</td>
               <td className="text-right">—</td>
-              <td className="text-right">{fmtX(grandTotal.grossMOIC)}</td>
-              <td className="text-right">{fmtPct(grandTotal.grossIRR)}</td>
+              <td className="text-right">—</td>
+              <td className="text-right">{fmtX(grandTotal.netMOIC)}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <div className="px-4 py-2 border-t border-[#1e3535] flex items-center gap-4">
+      <div className="px-4 py-2 border-t border-[#1e3535]">
         <p className="text-[0.65rem] text-[#90cac5] opacity-60">
-          All figures in USD millions · As of 31 December 2025 · Past performance is not indicative of future results.
+          All figures in USD millions · IRR / MOIC pending Metrics connection · Past performance is not indicative of future results.
         </p>
       </div>
     </div>
