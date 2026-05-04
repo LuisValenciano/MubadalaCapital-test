@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --teal-primary: #4DB6AC;
+  --teal-dark: #00897B;
+  --card-bg: #0d2626;
+  --card-bg2: #1a2e2e;
+  --row-alt: #1e3535;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #0a1f1f;
+  color: #e2f0ef;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0d2626; }
+::-webkit-scrollbar-thumb { background: #2d5555; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4DB6AC; }
+
+/* table utilities */
+.table-teal-header th {
+  background-color: #00897B;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+.table-row-base td {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  border-bottom: 1px solid #1e3535;
+  white-space: nowrap;
+}
+
+.row-alt { background-color: #1e3535; }
+.row-subtotal td {
+  background-color: #00897B;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.row-group-header td {
+  background-color: #0d4040;
+  color: #4DB6AC;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.kpi-card {
+  background: linear-gradient(135deg, #1a2e2e 0%, #0d2626 100%);
+  border: 1px solid #2d5555;
+  border-radius: 10px;
+  padding: 18px 22px;
+}
+
+.badge-teal {
+  background-color: #00695C;
+  color: #b2dfdb;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
