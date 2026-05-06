@@ -5,6 +5,9 @@ node_modules/
 .next/
 out/
 
+# generated exports
+output/
+
 # env files
 .env
 .env.local
