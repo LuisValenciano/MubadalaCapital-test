@@ -158,17 +158,17 @@ function getData(dateArg) {
 const C = {
   bg: 'FFFFFF',           // white slide background
   row: 'FFFFFF',          // white row
-  rowAlt: 'F5F7F7',       // very light grey alternating row
+  rowAlt: 'EAECEE',       // brand Pale Grey (Pantone Cool Grey 1)
   colHeaderBg: 'FFFFFF',  // column header background (white)
-  colHeaderTxt: '4FA8A0', // column header text (teal)
-  groupBar: '7FC5BF',     // light teal for group bar (with white text + totals)
-  totalBar: '4FA8A0',     // medium teal for grand total
-  teal: '4FA8A0',         // teal accent (subtitle)
-  border: 'D5DCDC',       // light border
-  text: '333333',         // body text dark grey
-  textMid: '4FA8A0',      // subtitle teal
+  colHeaderTxt: '00415A', // brand Primary Teal (Pantone 3025)
+  groupBar: '6C8397',     // brand Grey/Blue (Pantone 5425) — readable with white text
+  totalBar: '00415A',     // brand Primary Teal
+  teal: '00415A',         // brand Primary Teal — lines, subtitle, accents
+  border: 'EAECEE',       // brand Pale Grey
+  text: '333333',         // body text dark grey (not in brand guide, kept for readability)
+  textMid: '00415A',      // brand Primary Teal
   white: 'FFFFFF',
-  black: '1A1A1A',        // title text near-black
+  black: '000000',        // brand Black
 }
 
 const fmt = n => n === 0 ? '—' : Math.round(n).toLocaleString('en-US')
