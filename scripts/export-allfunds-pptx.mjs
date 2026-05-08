@@ -44,6 +44,30 @@ const toNum = s => { const n = parseFloat(String(s).replace(/,/g, '')); return i
 const dateKey = s => { const [m, d, y] = s.split('/'); return +y * 10000 + +m * 100 + +d }
 const quarterLabel = s => `Q${Math.ceil(+s.split('/')[0] / 3)} ${s.split('/')[2]}`
 
+function loadSOI(date) {
+  const toNum = s => { const n = parseFloat(String(s).replace(/,/g, '')); return isNaN(n) ? 0 : n }
+  const agg = new Map()
+  const accumulate = (id, tv, ti, real) => {
+    if (!id) return
+    if (!agg.has(id)) agg.set(id, { tv: 0, ti: 0, real: 0 })
+    const e = agg.get(id)
+    e.tv += tv; e.ti += ti; e.real += real
+  }
+  for (const r of parseCSV('SOI Direct.csv').filter(r => r['Reporting Date'] === date)) {
+    const real = toNum(r['Total Income']) + toNum(r['Proceeds'])
+    accumulate(r['MC2025Q1FundID'], toNum(r['Total Value']), toNum(r['Investments']), real)
+  }
+  for (const r of parseCSV('SOI Fund.csv').filter(r => r['Reporting Date'] === date)) {
+    const real = toNum(r['Realized'])
+    accumulate(r['MC2025Q1FundID'], toNum(r['Adjusted NAV']) + real, toNum(r['Total Called']), real)
+  }
+  const result = new Map()
+  for (const [id, { tv, ti, real }] of agg) {
+    if (ti > 0) result.set(id, { grossMOIC: tv / ti, grossDPI: real / ti })
+  }
+  return result
+}
+
 function loadIRR(date) {
   const rows = parseCSV('IRR per Portfolio.csv').filter(r => r['Reporting Date'] === date && r['MC2025Q1FundID'])
   const byFund = new Map()
@@ -54,14 +78,18 @@ function loadIRR(date) {
   }
   const result = new Map()
   for (const [id, frows] of byFund) {
-    if (frows.length === 1) {
-      const r = frows[0]
-      result.set(id, {
-        grossIRR: toNum(r['IRR']) * 100,
-        grossMOIC: toNum(r['TVPI']),
-        grossDPI: toNum(r['DPI']),
-      })
-    }
+    const totalPaidIn = frows.reduce((s, r) => s + toNum(r['PAIDIN']), 0)
+    // weighted-average IRR by PAIDIN; fall back to simple average if no PAIDIN
+    const wIRR = totalPaidIn > 0
+      ? frows.reduce((s, r) => s + toNum(r['IRR']) * toNum(r['PAIDIN']), 0) / totalPaidIn
+      : frows.reduce((s, r) => s + toNum(r['IRR']), 0) / frows.length
+    const totalTV = frows.reduce((s, r) => s + toNum(r['ADJUSTEDVALUATION']) + toNum(r['PAIDOUT']), 0)
+    const totalPaidOut = frows.reduce((s, r) => s + toNum(r['PAIDOUT']), 0)
+    result.set(id, {
+      grossIRR: wIRR * 100,
+      grossMOIC: totalPaidIn > 0 ? totalTV / totalPaidIn : 0,
+      grossDPI: totalPaidIn > 0 ? totalPaidOut / totalPaidIn : 0,
+    })
   }
   return result
 }
@@ -87,6 +115,7 @@ function getData(dateArg) {
   }
 
   const irr = loadIRR(reportingDate)
+  const soi = loadSOI(reportingDate)
 
   const funds = peqpr
     .map(f => {
@@ -94,6 +123,11 @@ function getData(dateArg) {
       const d = grouped.get(id)
       if (!d) return null
       const ir = irr.get(id) ?? null
+      const soiData = soi.get(id) ?? null
+      const called = d.called / M
+      const distributed = d.distributed / M
+      const nav = d.nav / M
+      const totalValue = distributed + nav
       return {
         id,
         name: f['Fund Name (Short)'],
@@ -101,16 +135,16 @@ function getData(dateArg) {
         group: f['Grouping'],
         sortOrder: parseInt(f['SortOrder']),
         fundSize: d.commitment / M,
-        totalCalled: d.called / M,
-        distributed: d.distributed / M,
-        adjustedNAV: d.nav / M,
-        totalValue: (d.distributed + d.nav) / M,
-        grossIRR: ir?.grossIRR ?? null,
-        grossMOIC: ir?.grossMOIC ?? null,
-        grossDPI: ir?.grossDPI ?? null,
-        netIRR: null,
-        netMOIC: null,
-        netDPI: null,
+        totalCalled: called,
+        distributed,
+        adjustedNAV: nav,
+        totalValue,
+        netDPI:   called > 0 ? distributed / called : null,
+        netMOIC:  called > 0 ? totalValue / called  : null,
+        netIRR:   null,
+        grossDPI:  soiData?.grossDPI  ?? null,
+        grossMOIC: soiData?.grossMOIC ?? null,
+        grossIRR:  ir?.grossIRR ?? null,
       }
     })
     .filter(Boolean)
@@ -145,6 +179,8 @@ const fmtP = n => (n == null || n === 0) ? '—' : `${n.toFixed(1)}%`
 
 function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
   const slide = pptx.addSlide()
+  // Explicit fontFace on every text call — pptx.defaultFontFace alone doesn't inject <a:latin> in runs
+  const txt = (content, opts) => slide.addText(content, { fontFace: 'D-DIN', ...opts })
 
   // Background
   slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: C.bg }, line: { type: 'none' } })
@@ -163,7 +199,7 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
   })
 
   // Title
-  slide.addText('Private Equity — All Funds', {
+  txt('Private Equity — All Funds', {
     x: 1.94, y: 0.16, w: 8.70, h: 0.42,
     fontSize: 22, bold: true, color: C.black,
   })
@@ -171,17 +207,17 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
   // Subtitle (teal)
   const dt = new Date(reportingDate)
   const displayDate = dt.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
-  slide.addText(`All funds (USD in Millions)`, {
+  txt('All funds (USD in Millions)', {
     x: 1.94, y: 0.56, w: 8.70, h: 0.22,
     fontSize: 11, bold: true, color: C.teal,
   })
 
   // Date top-right
-  slide.addText(displayDate, {
+  txt(displayDate, {
     x: 11.5, y: 0.30, w: 1.6, h: 0.30,
     fontSize: 11, color: C.black, align: 'right',
   })
-  slide.addText(quarter, {
+  txt(quarter, {
     x: 11.5, y: 0.52, w: 1.6, h: 0.22,
     fontSize: 9, color: C.teal, align: 'right', bold: true,
   })
@@ -195,17 +231,19 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
   // ─── Table layout ────────────────────────────────────────────────────────
   // Column widths tuned to fill 12.83" available width (matching SVG proportions)
   const cols = [
-    { key: 'name',        label: 'Fund Name',   w: 1.74, align: 'left',  bold: true },
-    { key: 'vintage',     label: 'Vintage',     w: 0.90, align: 'left' },
-    { key: 'fundSize',    label: 'Fund Size',   w: 1.05, align: 'right', fmt },
-    { key: 'totalCalled', label: 'Called',      w: 1.05, align: 'right', fmt },
-    { key: 'distributed', label: 'Distributed', w: 1.15, align: 'right', fmt },
-    { key: 'adjustedNAV', label: 'Adj. NAV',    w: 1.08, align: 'right', fmt },
-    { key: 'totalValue',  label: 'Total Value', w: 1.22, align: 'right', fmt, bold: true },
-    { key: 'grossIRR',    label: 'Gross IRR',   w: 0.98, align: 'right', fmt: fmtP },
-    { key: 'netIRR',      label: 'Net IRR',     w: 0.98, align: 'right', fmt: fmtP },
-    { key: 'grossMOIC',   label: 'Gross MOIC',  w: 1.15, align: 'right', fmt: fmtX, bold: true },
-    { key: 'netMOIC',     label: 'Net MOIC',    w: 1.53, align: 'right', fmt: fmtX, bold: true },
+    { key: 'name',        label: 'Fund Name',    w: 1.80, align: 'left',  bold: true },
+    { key: 'vintage',     label: 'Vintage',      w: 0.85, align: 'left' },
+    { key: 'fundSize',    label: 'Fund Size',    w: 1.00, align: 'right', fmt },
+    { key: 'totalCalled', label: 'Total Called', w: 1.00, align: 'right', fmt },
+    { key: 'distributed', label: 'Distributed',  w: 1.00, align: 'right', fmt },
+    { key: 'adjustedNAV', label: 'Adjusted Nav', w: 1.15, align: 'right', fmt },
+    { key: 'totalValue',  label: 'Total Value',  w: 1.00, align: 'right', fmt, bold: true },
+    { key: 'netDPI',      label: 'Net DPI',      w: 0.88, align: 'right', fmt: fmtX },
+    { key: 'netMOIC',     label: 'Net MOIC',     w: 0.83, align: 'right', fmt: fmtX, bold: true },
+    { key: 'netIRR',      label: 'Net IRR',      w: 0.75, align: 'right', fmt: fmtP },
+    { key: 'grossDPI',    label: 'Gross DPI',    w: 0.75, align: 'right', fmt: fmtX },
+    { key: 'grossMOIC',   label: 'Gross MOIC',   w: 0.95, align: 'right', fmt: fmtX, bold: true },
+    { key: 'grossIRR',    label: 'Gross IRR',    w: 0.87, align: 'right', fmt: fmtP },
   ]
 
   const startX = 0.25
@@ -229,7 +267,7 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
     fill: { color: C.colHeaderBg }, line: { type: 'none' },
   })
   for (const c of cols) {
-    slide.addText(c.label, {
+    txt(c.label, {
       x: c.x + 0.05, y: y + 0.02, w: c.w - 0.1, h: headerH - 0.04,
       fontSize: 9, bold: true, color: C.colHeaderTxt, align: c.align, valign: 'middle',
     })
@@ -253,7 +291,7 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
       const v = values[i]
       if (v == null || v === '') continue
       const fw = bold || c.bold
-      slide.addText(v, {
+      txt(v, {
         x: c.x + 0.05, y: y + 0.01, w: c.w - 0.1, h: height - 0.02,
         fontSize, bold: fw, color, align: c.align, valign: 'middle',
       })
@@ -271,16 +309,18 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
     const sumF = (k) => groupFunds.reduce((s, f) => s + (f[k] ?? 0), 0)
     const calledSum = sumF('totalCalled')
     const tvSum = sumF('totalValue')
+    const distSum = sumF('distributed')
     const groupValues = cols.map(c => {
       if (c.key === 'name') return group
       if (c.key === 'vintage') return ''
       if (c.key === 'fundSize') return fmt(sumF('fundSize'))
       if (c.key === 'totalCalled') return fmt(calledSum)
-      if (c.key === 'distributed') return fmt(sumF('distributed'))
+      if (c.key === 'distributed') return fmt(distSum)
       if (c.key === 'adjustedNAV') return fmt(sumF('adjustedNAV'))
       if (c.key === 'totalValue') return fmt(tvSum)
+      if (c.key === 'netDPI') return calledSum > 0 ? fmtX(distSum / calledSum) : '—'
       if (c.key === 'netMOIC') return calledSum > 0 ? fmtX(tvSum / calledSum) : '—'
-      return '—'
+      return ''
     })
     drawRow(groupValues, { bg: C.groupBar, color: C.white, bold: true, height: groupH, fontSize: 9 })
 
@@ -290,6 +330,7 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
       const values = cols.map(c => {
         if (c.key === 'name') return f.name
         if (c.key === 'vintage') return String(f.vintage)
+        if (c.key === 'grossIRR' && f.group === 'Co-Investment') return '—'
         return c.fmt(f[c.key])
       })
       drawRow(values, { bg, fontSize: 8.5, color: C.text })
@@ -298,26 +339,9 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
     y += 0.04
   }
 
-  // Grand total — only funds from rendered groups so totals match the visible subtotals
-  const shownFunds = funds.filter(f => groups.includes(f.group))
-  const totalCalled = shownFunds.reduce((s, f) => s + f.totalCalled, 0)
-  const totalValue = shownFunds.reduce((s, f) => s + f.totalValue, 0)
-  const gtValues = cols.map(c => {
-    if (c.key === 'name') return 'TOTAL PORTFOLIO'
-    if (c.key === 'vintage') return ''
-    if (c.key === 'fundSize') return fmt(shownFunds.reduce((s, f) => s + f.fundSize, 0))
-    if (c.key === 'totalCalled') return fmt(totalCalled)
-    if (c.key === 'distributed') return fmt(shownFunds.reduce((s, f) => s + f.distributed, 0))
-    if (c.key === 'adjustedNAV') return fmt(shownFunds.reduce((s, f) => s + f.adjustedNAV, 0))
-    if (c.key === 'totalValue') return fmt(totalValue)
-    if (c.key === 'netMOIC') return totalCalled > 0 ? fmtX(totalValue / totalCalled) : '—'
-    return '—'
-  })
-  drawRow(gtValues, { bg: C.totalBar, color: C.white, bold: true, height: gtH, fontSize: 10 })
-
   // Footer text
-  slide.addText(
-    'All figures in USD millions  ·  IRR / MOIC pending Metrics connection  ·  Past performance is not indicative of future results.',
+  txt(
+    'All figures in USD millions  ·  Net IRR pending Metrics connection  ·  Past performance is not indicative of future results.',
     { x: 0.25, y: 7.20, w: 12.83, h: 0.20, fontSize: 7, color: '888888' },
   )
 
@@ -338,7 +362,8 @@ const pptx = new PptxGenJS()
 pptx.layout = 'LAYOUT_WIDE' // 13.333" x 7.5"
 pptx.title = `Mubadala Capital — All Funds ${quarter}`
 pptx.author = 'Mubadala Capital'
-pptx.defaultFontFace = 'Segoe UI'
+
+pptx.defaultFontFace = 'D-DIN'
 
 buildAllFundsSlide(pptx, funds, quarter, reportingDate)
 
