@@ -27,13 +27,37 @@ function parseCSVLine(line) {
 
 function parseCSV(filename) {
   const content = fs.readFileSync(path.join(ROOT, 'data', filename), 'utf-8')
-  const lines = content.split(/\r?\n/).filter(l => l.trim())
-  const headers = parseCSVLine(lines[0]).map(h => h.trim())
-  return lines.slice(1).map(line => {
-    const values = parseCSVLine(line)
-    const row = {}
-    headers.forEach((h, i) => row[h] = (values[i] ?? '').trim())
-    return row
+    .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+  // Character-level parser to correctly handle multiline quoted fields
+  const rows = []
+  let fields = [], field = '', inQuotes = false
+  for (let i = 0; i < content.length; i++) {
+    const c = content[i]
+    if (c === '"') {
+      if (inQuotes && content[i + 1] === '"') { field += '"'; i++ }
+      else inQuotes = !inQuotes
+    } else if (c === ',' && !inQuotes) {
+      fields.push(field); field = ''
+    } else if (c === '\n' && !inQuotes) {
+      fields.push(field); field = ''
+      if (fields.some(f => f.trim())) rows.push(fields)
+      fields = []
+    } else {
+      field += c
+    }
+  }
+  if (field || fields.length > 0) {
+    fields.push(field)
+    if (fields.some(f => f.trim())) rows.push(fields)
+  }
+
+  if (rows.length === 0) return []
+  const headers = rows[0].map(h => h.trim())
+  return rows.slice(1).map(row => {
+    const obj = {}
+    headers.forEach((h, i) => obj[h] = (row[i] ?? '').trim())
+    return obj
   })
 }
 
@@ -158,7 +182,7 @@ function getData(dateArg) {
         netIRR:   null,
         grossDPI:  soiData?.grossDPI  ?? null,
         grossMOIC: soiData?.grossMOIC ?? null,
-        grossIRR:  f['Grouping'] === 'Co-Investment' ? (soiData?.grossIRR ?? null) : (ir?.grossIRR ?? null),
+        grossIRR:  ir?.grossIRR ?? soiData?.grossIRR ?? null,
       }
     })
     .filter(Boolean)
@@ -232,6 +256,47 @@ function loadSOIRows(fundId, date) {
     })
   }
   return rows
+}
+
+// ─── Notes helpers ───────────────────────────────────────────────────────────
+
+function loadNote(fundId) {
+  try {
+    const rows = parseCSV('NOTES.csv')
+    const row = rows.find(r => r['Investee'] === fundId)
+    return row ? row['Text'] : ''
+  } catch { return '' }
+}
+
+function resolveNote(template, fund, soiRows, reportingDate) {
+  if (!template) return ''
+  const [m, d, y] = reportingDate.split('/')
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
+  const realM = soiRows.reduce((s, r) => s + r.realized, 0) / M
+  return template
+    .replace(/\[\{Reporting Month\}\]/g, months[parseInt(m) - 1])
+    .replace(/\[\{Reporting Day\}\]/g,   String(parseInt(d)))
+    .replace(/\[\{Reporting Year\}\]/g,  y)
+    .replace(/\[\{total_invested\}\]/g,         (fund.totalCalled / 1000).toFixed(2))
+    .replace(/\[\{total_invested_million\}\]/g,  Math.round(fund.totalCalled))
+    .replace(/\[\{num_investee\}\]/g,            soiRows.length)
+    .replace(/\[\{MOIC\}\]/g,      fund.grossMOIC != null ? fund.grossMOIC.toFixed(2) : '—')
+    .replace(/\[\{GROSS_IRR\}\]/g, fund.grossIRR  != null ? fund.grossIRR.toFixed(1)  : '—')
+    .replace(/\[\{GROSS_DPI\}\]/g, fund.grossDPI  != null ? fund.grossDPI.toFixed(2)  : '—')
+    .replace(/\[\{NET_MOIC\}\]/g,  fund.netMOIC   != null ? fund.netMOIC.toFixed(2)   : '—')
+    .replace(/\[\{NET_IRR\}\]/g,   fund.netIRR    != null ? fund.netIRR.toFixed(1)    : '—')
+    .replace(/\[\{NET_DPI\}\]/g,   fund.netDPI    != null ? fund.netDPI.toFixed(2)    : '—')
+    .replace(/\[\{Realizations\}\]/g,  realM.toFixed(0))
+    .replace(/\[\{NAV\}\]/g,           Math.round(fund.adjustedNAV))
+    .replace(/\[\{Total_Value\}\]/g,   Math.round(fund.totalValue).toLocaleString('en-US'))
+    .replace(/\[\{Distributions\}\]/g, (fund.distributed / 1000).toFixed(1))
+    .replace(/\r\n/g, '\n')
+    .replace(/\n\n+/g, '§')   // protect paragraph breaks
+    .replace(/\n/g, ' ')      // collapse soft wraps
+    .replace(/§/g, '\n')      // restore paragraph breaks as single \n
+    .replace(/  +/g, ' ')
+    .replace(/\?/g, '’') // fix apostrophe encoding artifact
+    .trim()
 }
 
 // ─── Theme (PptxGenJS uses hex without #) — Light mode matching Power BI ─────
@@ -569,7 +634,7 @@ function buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate) {
 
 // ─── Fund overview slide (Fund Detail: metrics + bar chart) ──────────────────
 
-function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate) {
+function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate, noteText = '') {
   const slide = pptx.addSlide()
   const txt = (content, opts) => slide.addText(content, { fontFace: 'D-DIN', ...opts })
   const fmtDate = s => { const [m, d, y] = s.split('/'); return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}` }
@@ -592,6 +657,11 @@ function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate) {
   txt('OVERVIEW', { x:lX, y:lY, w:lW, h:0.32, fontSize:13, bold:true, color:C.black })
   slide.addShape(pptx.ShapeType.line, { x:lX, y:lY+0.36, w:lW, h:0, line:{color:C.teal, width:1.0} })
 
+  // Fund note (resolved template)
+  if (noteText) {
+    txt(noteText, { x: lX, y: lY + 0.42, w: lW, h: 0.76, fontSize: 7.5, color: C.text, valign: 'top' })
+  }
+
   // # of Unrealized Investments
   const unrealizedCount = soiRows.filter(r => r.nav > 0).length
   const uY = 2.20
@@ -604,9 +674,9 @@ function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate) {
   const mY = 3.22, mCellH = 0.90, mColW = lW / 2
   const metrics = [
     { label:'Gross MOIC', value: fund.grossMOIC != null ? fmtX(fund.grossMOIC) : '—' },
-    { label:'Net MOIC',   value: '—' },
+    { label:'Net MOIC',   value: fund.netMOIC  != null ? fmtX(fund.netMOIC)  : '—' },
     { label:'Gross DPI',  value: fund.grossDPI  != null ? fmtX(fund.grossDPI)  : '—' },
-    { label:'Net DPI',    value: '—' },
+    { label:'Net DPI',    value: fund.netDPI   != null ? fmtX(fund.netDPI)   : '—' },
     { label:'Gross IRR',  value: fund.grossIRR  != null ? fmtP(fund.grossIRR)  : '—' },
     { label:'Net IRR',    value: '—' },
   ]
@@ -815,7 +885,8 @@ const helios = funds.find(f => f.id === 'MC-PE-4')
 if (helios) {
   const heliosDetail  = getFundDetailData('MC-PE-4', reportingDate)
   const heliosSoiRows = loadSOIRows('MC-PE-4', reportingDate)
-  buildFundOverviewSlide(pptx, helios, heliosSoiRows, quarter, reportingDate)  // Slide 2: Fund Detail
+  const heliosNote    = resolveNote(loadNote('MC-PE-4'), helios, heliosSoiRows, reportingDate)
+  buildFundOverviewSlide(pptx, helios, heliosSoiRows, quarter, reportingDate, heliosNote)  // Slide 2: Fund Detail
   buildFundDetailSlide(pptx, helios, heliosDetail, quarter, reportingDate)     // Slide 3: Capital
   buildSOISlide(pptx, helios, heliosSoiRows, quarter, reportingDate)           // Slide 4: SOI
   console.log(`✓ Helios IV slides built (${heliosSoiRows.length} SOI rows, prev quarter: ${heliosDetail.prevDate ?? 'N/A'})`)

@@ -1,0 +1,45 @@
+Investee,Fund Name (Short),Text
+MC-Co-A-1,ZENITH Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-A-2,BLUEWAVE,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-F-1,MERIDIAN,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-G-1,SUMMIT Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-L-1,IRONCLAD Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-M-1,NEXUS Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-O-1,EVOLVE Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-P-1,ORION Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-P-2,ATLAS Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-Co-W-1,EDUCORE,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
+MC-PE-1,ARC I,"MDC I has invested $[{total_invested}] billion in [{num_investee}] portfolio investments including: 15 Fund Investments, 14 Non-Controlled Investments and One Controlled Investment.
+
+The Fund portfolios have generated $[{Realizations}] billion in realizations and have a remaining NAV of $[{NAV}] million as
+of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}], representing a Gross DPI of [{GROSS_DPI}]x, a net MOIC of [{NET_MOIC}]x and net IRR of [{NET_IRR}]%. ?
+
+One Controlled Investment, six Non-Controlled Investments and all 15 Fund Investments have been fully realized generating aggregate proceeds of $[{Distributions}] billion vs invested capital for those realized investments of $2.1 billion, which equates to a net DPI of [{NET_DPI}]x."
+MC-PE-1a,HELIOS I-A,"MC I-A has invested $[{total_invested_million}] million in portfolio investments including: 11 Fund Investments and two Direct Investments.
+
+These investments were valued at $1.1 billion, including $[{Realizations}] million of realization as of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}]. ?
+
+The current DPI is [{NET_DPI}]x, net IRR is [{NET_IRR}]% and net MOIC to investors is [{NET_MOIC}]x as of quarter-end."
+MC-PE-2,ARC II,"MDC II has invested $[{total_invested}] Billion in [{num_investee}] portfolio investments including: 10 Fund Investments, 11 Non-Controlled Investments.
+
+The Fund?s portfolio generated $[{Realizations}] million in realizations as of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}], representing a net MOIC of [{NET_MOIC}]x and net IRR of [{NET_IRR}]%, and a DPI of [{GROSS_DPI}]x."
+MC-PE-3,NOVA III,"MIC III has invested $[{total_invested}] billion into the portfolio investments, which is currently valued at $[{Total_Value}] billion, inclusive of  $[{Realizations}] million of realizations, which represents a gross DPI of [{GROSS_DPI}]x.
+
+As of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}], the Fund?s portfolio is valued at a net MOIC of [{NET_MOIC}]x and a net IRR of [{NET_IRR}]% across nine assets, of which seven are unrealized, including, Whataburger, YES Network, Peterson Farms, Culligan International, K-MAC
+Enterprises and Witherslack."
+MC-PE-4,HELIOS IV,"MC PE IV has invested $[{total_invested}] billion across [{num_investee}] high-quality portfolio companies.
+
+As of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}], Fund IV?s portfolio is valued at a gross MOIC of [{MOIC}]x and a gross IRR of [{GROSS_IRR}]% / net MOIC of
+[{NET_MOIC}]x and a net IRR of [{NET_IRR}]% across [{num_investee}] assets including Canada Cartage, Thrive Foods, Tandem Foods, Mauser
+Packaging Solutions, Aman Hotel Group, Fortress Investment Group, Forfar Education, RelyOn Nutec, and Bugaboo."
+MC-V-1,AURORA I,"The Fund has invested $[{total_invested}] in a portfolio that includes 10 Funds Investments and six Direct Investments.
+
+These Fund and Direct investments were valued at $1.7 billion, including $[{Realizations}] million of realization as of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}].
+
+Net MOIC and IRR for the Fund was [{NET_MOIC}]x and [{NET_IRR}]% as of quarter-end.
+"
+MC-V-2,AURORA II,"The Fund has invested $[{total_invested_million}] million in a portfolio that includes three Funds Investments and two Direct Investments.
+
+These Fund and Direct investments were valued at $172.1 million, including $[{Realizations}] million of realization as of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}]. 
+
+As of quarter-end, net MOIC was [{NET_MOIC}]x and net IRR was [{NET_IRR}]% for the Fund."
