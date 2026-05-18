@@ -143,12 +143,18 @@ function getData(dateArg) {
   const grouped = new Map()
   for (const r of rows) {
     const id = r['MC2025Q1FundID']
-    if (!grouped.has(id)) grouped.set(id, { called: 0, distributed: 0, nav: 0, commitment: 0 })
+    if (!grouped.has(id)) grouped.set(id, { called: 0, distributed: 0, nav: 0, commitment: 0, thirdPartyRaw: 0, gpCommitment: 0, mc: 0, mic: 0, solutions: 0 })
     const e = grouped.get(id)
     e.commitment += toNum(r['Commitment'])
-    e.called += toNum(r['Called'])
-    e.distributed += toNum(r['Distributed'])
-    e.nav += toNum(r['Adjusted NAV'])
+    e.called     += toNum(r['Called'])
+    e.distributed+= toNum(r['Distributed'])
+    e.nav        += toNum(r['Adjusted NAV'])
+    const ib = r['Invested By']
+    if (ib === 'Third Party')   e.thirdPartyRaw += toNum(r['Commitment'])
+    if (ib === 'GP Commitment') e.gpCommitment  += toNum(r['Commitment'])
+    if (ib === 'MC')            e.mc            += toNum(r['Commitment'])
+    if (ib === 'MIC')           e.mic           += toNum(r['Commitment'])
+    if (ib === 'Solutions')     e.solutions     += toNum(r['Commitment'])
   }
 
   const irr = loadIRR(reportingDate)
@@ -172,7 +178,11 @@ function getData(dateArg) {
         vintage: parseInt(f['Vintage']),
         group: f['Grouping'],
         sortOrder: parseInt(f['SortOrder']),
-        fundSize: d.commitment / M,
+        fundSize:   d.commitment / M,
+        thirdParty: (d.thirdPartyRaw + d.gpCommitment) / M,
+        mc:         d.mc / M,
+        mic:        d.mic / M,
+        solutions:  d.solutions / M,
         totalCalled: called,
         distributed,
         adjustedNAV: nav,
@@ -351,15 +361,14 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
   })
 
   // Subtitle (teal)
-  const dt = new Date(reportingDate)
-  const displayDate = dt.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
+  const fmtDate = s => { const [m, d, y] = s.split('/'); return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}` }
   txt('All funds (USD in Millions)', {
     x: 1.94, y: 0.56, w: 8.70, h: 0.22,
     fontSize: 11, bold: true, color: C.teal,
   })
 
   // Date top-right
-  txt(displayDate, {
+  txt(fmtDate(reportingDate), {
     x: 11.5, y: 0.30, w: 1.6, h: 0.30,
     fontSize: 11, color: C.black, align: 'right',
   })
@@ -371,7 +380,7 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
   // Horizontal separator between header and table (teal line, full width)
   slide.addShape(pptx.ShapeType.line, {
     x: 0.15, y: 0.90, w: 13.0, h: 0,
-    line: { color: C.teal, width: 1.5 },
+    line: { color: '005151', width: 1.5 },
   })
 
   // ─── Table layout ────────────────────────────────────────────────────────
@@ -490,11 +499,145 @@ function buildAllFundsSlide(pptx, funds, quarter, reportingDate) {
     { x: 0.25, y: 7.20, w: 12.83, h: 0.20, fontSize: 7, color: '888888' },
   )
 
-  // Footer teal line (matches PBI bottom border)
-  slide.addShape(pptx.ShapeType.line, {
-    x: 0.15, y: 7.42, w: 13.0, h: 0,
-    line: { color: C.teal, width: 1.5 },
+  slide.addShape(pptx.ShapeType.rect, { x:0, y:7.38, w:13.333, h:0.12, fill:{color:'7AC4BD'}, line:{type:'none'} })
+}
+
+// ─── All Funds Breakdown slide (Fund Size expanded into components) ───────────
+
+function buildAllFundsBreakdownSlide(pptx, funds, quarter, reportingDate) {
+  const slide = pptx.addSlide()
+  const txt = (content, opts) => slide.addText(content, { fontFace: 'D-DIN', ...opts })
+
+  slide.addShape(pptx.ShapeType.rect, { x:0, y:0, w:'100%', h:'100%', fill:{color:C.bg}, line:{type:'none'} })
+
+  // ─── Header ─────────────────────────────────────────────────────────────
+  slide.addImage({
+    path: path.join(ROOT, 'public', 'Mubadala Logo_Stacked Center Aligned_Black.jpg'),
+    x: 0.15, y: 0.26, w: 1.60, h: 0.42,
   })
+  slide.addShape(pptx.ShapeType.line, { x:1.90, y:0.26, w:0, h:0.52, line:{color:C.border, width:0.75} })
+  txt('Private Equity — All Funds Breakdown', {
+    x:1.94, y:0.16, w:9.50, h:0.42, fontSize:22, bold:true, color:C.black,
+  })
+  const fmtDate = s => { const [m, d, y] = s.split('/'); return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}` }
+  txt('Fund Size components (USD in Millions)', {
+    x:1.94, y:0.56, w:9.50, h:0.22, fontSize:11, bold:true, color:C.teal,
+  })
+  txt(fmtDate(reportingDate), {
+    x:11.5, y:0.30, w:1.6, h:0.30, fontSize:11, color:C.black, align:'right',
+  })
+  txt(quarter, {
+    x:11.5, y:0.52, w:1.6, h:0.22, fontSize:9, color:C.teal, align:'right', bold:true,
+  })
+  slide.addShape(pptx.ShapeType.line, { x:0.15, y:0.90, w:13.0, h:0, line:{color:'005151', width:1.5} })
+
+  // ─── 17-column layout ────────────────────────────────────────────────────
+  const cols = [
+    { key:'name',        label:'Fund Name',    w:1.42, align:'left',  bold:true },
+    { key:'vintage',     label:'Vintage',      w:0.68, align:'left'  },
+    { key:'fundSize',    label:'Fund Size',    w:0.85, align:'right', fmt },
+    { key:'thirdParty',  label:'Third Party',  w:0.72, align:'right', fmt, dim:true },
+    { key:'mic',         label:'MIC',          w:0.52, align:'right', fmt, dim:true },
+    { key:'mc',          label:'MC',           w:0.52, align:'right', fmt, dim:true },
+    { key:'solutions',   label:'Solutions',    w:0.75, align:'right', fmt, dim:true },
+    { key:'totalCalled', label:'Total Called', w:0.85, align:'right', fmt },
+    { key:'distributed', label:'Distributed',  w:0.75, align:'right', fmt },
+    { key:'adjustedNAV', label:'Adjusted Nav', w:0.80, align:'right', fmt },
+    { key:'totalValue',  label:'Total Value',  w:0.80, align:'right', fmt, bold:true },
+    { key:'netDPI',      label:'Net DPI',      w:0.68, align:'right', fmt: fmtX },
+    { key:'netMOIC',     label:'Net MOIC',     w:0.75, align:'right', fmt: fmtX, bold:true },
+    { key:'netIRR',      label:'Net IRR',      w:0.68, align:'right', fmt: fmtP },
+    { key:'grossDPI',    label:'Gross DPI',    w:0.68, align:'right', fmt: fmtX },
+    { key:'grossMOIC',   label:'Gross MOIC',   w:0.78, align:'right', fmt: fmtX, bold:true },
+    { key:'grossIRR',    label:'Gross IRR',    w:0.60, align:'right', fmt: fmtP },
+  ]
+
+  const startX = 0.25, startY = 0.95
+  const rowH = 0.195, headerH = 0.28, groupH = 0.22
+  let cx = startX
+  cols.forEach(c => { c.x = cx; cx += c.w })
+  const tableW = cols.reduce((s, c) => s + c.w, 0)
+  let y = startY
+
+  // Column header row
+  slide.addShape(pptx.ShapeType.rect, { x:startX, y, w:tableW, h:headerH, fill:{color:C.colHeaderBg}, line:{type:'none'} })
+  for (const c of cols.filter(c => c.dim)) {
+    slide.addShape(pptx.ShapeType.rect, { x:c.x, y, w:c.w, h:headerH, fill:{color:C.border}, line:{type:'none'} })
+  }
+  for (const c of cols) {
+    txt(c.label, {
+      x:c.x+0.03, y:y+0.02, w:c.w-0.06, h:headerH-0.04,
+      fontSize:7.0, bold:true, color:c.dim ? C.textMid : C.colHeaderTxt, align:c.align, valign:'middle',
+    })
+  }
+  slide.addShape(pptx.ShapeType.line, { x:startX, y:y+headerH, w:tableW, h:0, line:{color:C.border, width:0.75} })
+  y += headerH
+
+  function drawRow(values, opts) {
+    const { bg, color=C.text, bold=false, height=rowH, fontSize=8 } = opts
+    slide.addShape(pptx.ShapeType.rect, { x:startX, y, w:tableW, h:height, fill:{color:bg}, line:{type:'none'} })
+    if (color === C.white) {
+      for (const c of cols.filter(c => c.dim)) {
+        slide.addShape(pptx.ShapeType.rect, { x:c.x, y, w:c.w, h:height, fill:{color:C.border}, line:{type:'none'} })
+      }
+    }
+    for (let i = 0; i < cols.length; i++) {
+      const c = cols[i], v = values[i]
+      if (v == null || v === '') continue
+      const fc = (c.dim && color === C.white) ? C.text : color
+      txt(v, {
+        x:c.x+0.03, y:y+0.01, w:c.w-0.06, h:height-0.02,
+        fontSize, bold: bold || c.bold, color:fc, align:c.align, valign:'middle',
+      })
+    }
+    y += height
+  }
+
+  const groups = ['Flagship', 'Continuation', 'Co-Investment']
+
+  for (const group of groups) {
+    const groupFunds = funds.filter(f => f.group === group)
+    if (groupFunds.length === 0) continue
+
+    const sumF = k => groupFunds.reduce((s, f) => s + (f[k] ?? 0), 0)
+    const calledSum = sumF('totalCalled'), tvSum = sumF('totalValue'), distSum = sumF('distributed')
+
+    const groupValues = cols.map(c => {
+      if (c.key === 'name')        return group
+      if (c.key === 'vintage')     return ''
+      if (c.key === 'fundSize')    return fmt(sumF('fundSize'))
+      if (c.key === 'thirdParty')  return fmt(sumF('thirdParty'))
+      if (c.key === 'mic')         return fmt(sumF('mic'))
+      if (c.key === 'mc')          return fmt(sumF('mc'))
+      if (c.key === 'solutions')   return fmt(sumF('solutions'))
+      if (c.key === 'totalCalled') return fmt(calledSum)
+      if (c.key === 'distributed') return fmt(distSum)
+      if (c.key === 'adjustedNAV') return fmt(sumF('adjustedNAV'))
+      if (c.key === 'totalValue')  return fmt(tvSum)
+      if (c.key === 'netDPI')      return calledSum > 0 ? fmtX(distSum / calledSum) : '—'
+      if (c.key === 'netMOIC')     return calledSum > 0 ? fmtX(tvSum  / calledSum)  : '—'
+      return ''
+    })
+    drawRow(groupValues, { bg:C.groupBar, color:C.white, bold:true, height:groupH, fontSize:9 })
+
+    groupFunds.forEach((f, i) => {
+      const bg = i % 2 === 1 ? C.rowAlt : C.row
+      const values = cols.map(c => {
+        if (c.key === 'name')    return f.name
+        if (c.key === 'vintage') return String(f.vintage)
+        return c.fmt(f[c.key])
+      })
+      drawRow(values, { bg, fontSize:8, color:C.text })
+    })
+
+    y += 0.04
+  }
+
+  txt(
+    'All figures in USD millions  ·  Third Party = GP Commitment + Third Party raw  ·  Net IRR pending Metrics connection  ·  Past performance is not indicative of future results.',
+    { x:0.25, y:7.20, w:12.83, h:0.20, fontSize:7, color:'888888' },
+  )
+  slide.addShape(pptx.ShapeType.rect, { x:0, y:7.38, w:13.333, h:0.12, fill:{color:'7AC4BD'}, line:{type:'none'} })
 }
 
 // ─── Fund detail slide ───────────────────────────────────────────────────────
@@ -515,7 +658,7 @@ function buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate) {
   slide.addShape(pptx.ShapeType.line, { x:9.10, y:0.26, w:0, h:0.52, line:{color:C.border, width:0.75} })
   txt(fund.group, { x:9.20, y:0.30, w:2.10, h:0.30, fontSize:13, bold:true, color:C.black, align:'center' })
   txt(fmtDate(reportingDate), { x:11.50, y:0.30, w:1.65, h:0.30, fontSize:11, color:C.black, align:'right' })
-  slide.addShape(pptx.ShapeType.line, { x:0.15, y:0.90, w:13.0, h:0, line:{color:C.teal, width:1.5} })
+  slide.addShape(pptx.ShapeType.line, { x:0.15, y:0.90, w:13.0, h:0, line:{color:'005151', width:1.5} })
 
   const { curr, prev, prevDate } = detail
   const toM = v => v / M
@@ -591,9 +734,9 @@ function buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate) {
   // Floating waterfall: first/last bars from baseline; intermediate bars float
   const wfBars = [
     { label:fmtDate(prevDate),      value:navPrev,     baseline:true,  color:C.teal },
-    { label:'Call',                 value:deltaCalled, baseline:false, color:C.textMid },
-    { label:'Distributed',          value:deltaDist,   baseline:false, color:C.textMid },
-    { label:'P&L',                  value:pnl,         baseline:false, color:pnl >= 0 ? C.teal : 'F37D44' },
+    { label:'Call',                 value:deltaCalled, baseline:false, color:C.teal },
+    { label:'Distributed',          value:deltaDist,   baseline:false, color:C.teal },
+    { label:'P&L',                  value:pnl,         baseline:false, color:C.teal },
     { label:fmtDate(reportingDate), value:navCurr,     baseline:true,  color:C.textMid },
   ]
   const barW2 = 0.75
@@ -629,7 +772,7 @@ function buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate) {
   slide.addShape(pptx.ShapeType.line, { x:c2X, y:axisY, w:c2W, h:0, line:{color:'D0D0D0', width:0.5} })
 
   // Footer teal line
-  slide.addShape(pptx.ShapeType.line, { x:0.15, y:7.42, w:13.0, h:0, line:{color:C.teal, width:1.5} })
+  slide.addShape(pptx.ShapeType.rect, { x:0, y:7.38, w:13.333, h:0.12, fill:{color:'7AC4BD'}, line:{type:'none'} })
 }
 
 // ─── Fund overview slide (Fund Detail: metrics + bar chart) ──────────────────
@@ -649,7 +792,7 @@ function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate, not
   slide.addShape(pptx.ShapeType.line, { x:9.10, y:0.26, w:0, h:0.52, line:{color:C.border, width:0.75} })
   txt(fund.group, { x:9.20, y:0.30, w:2.10, h:0.30, fontSize:13, bold:true, color:C.black, align:'center' })
   txt(fmtDate(reportingDate), { x:11.50, y:0.30, w:1.65, h:0.30, fontSize:11, color:C.black, align:'right' })
-  slide.addShape(pptx.ShapeType.line, { x:0.15, y:0.90, w:13.0, h:0, line:{color:C.teal, width:1.5} })
+  slide.addShape(pptx.ShapeType.line, { x:0.15, y:0.90, w:13.0, h:0, line:{color:'005151', width:1.5} })
 
   // ─── LEFT section ───────────────────────────────────────────────────────
   const lX = 0.25, lY = 1.05, lW = 6.10
@@ -659,19 +802,18 @@ function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate, not
 
   // Fund note (resolved template)
   if (noteText) {
-    txt(noteText, { x: lX, y: lY + 0.42, w: lW, h: 0.76, fontSize: 7.5, color: C.text, valign: 'top' })
+    txt(noteText, { x: lX, y: lY + 0.42, w: lW, h: 1.65, fontSize: 11, color: C.text, valign: 'top' })
   }
 
   // # of Unrealized Investments
   const unrealizedCount = soiRows.filter(r => r.nav > 0).length
-  const uY = 2.20
+  const uY = 3.22
   slide.addShape(pptx.ShapeType.line, { x:lX, y:uY, w:lW, h:0, line:{color:C.border, width:0.5} })
-  txt(String(unrealizedCount), { x:lX, y:uY+0.08, w:lW, h:0.50, fontSize:34, bold:true, color:C.black, align:'center' })
+  txt(String(unrealizedCount), { x:lX, y:uY+0.08, w:lW, h:0.50, fontSize:22, bold:true, color:C.black, align:'center' })
   txt('# of Unrealized Investments', { x:lX, y:uY+0.60, w:lW, h:0.24, fontSize:10.5, color:'888888', align:'center' })
-  slide.addShape(pptx.ShapeType.line, { x:lX, y:uY+0.90, w:lW, h:0, line:{color:C.border, width:0.5} })
 
   // Metrics grid: 2 cols × 3 rows
-  const mY = 3.22, mCellH = 0.90, mColW = lW / 2
+  const mY = 4.22, mCellH = 0.90, mColW = lW / 2
   const metrics = [
     { label:'Gross MOIC', value: fund.grossMOIC != null ? fmtX(fund.grossMOIC) : '—' },
     { label:'Net MOIC',   value: fund.netMOIC  != null ? fmtX(fund.netMOIC)  : '—' },
@@ -684,8 +826,8 @@ function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate, not
     const col = i % 2, row = Math.floor(i / 2)
     const mx = lX + col * mColW, my = mY + row * mCellH
     slide.addShape(pptx.ShapeType.line, { x:mx, y:my, w:mColW, h:0, line:{color:C.border, width:0.5} })
-    txt(m.value, { x:mx+0.08, y:my+0.10, w:mColW-0.12, h:0.46, fontSize:22, bold:true, color:C.black })
-    txt(m.label, { x:mx+0.08, y:my+0.58, w:mColW-0.12, h:0.22, fontSize:10, color:'888888' })
+    txt(m.value, { x:mx+0.08, y:my+0.10, w:mColW-0.16, h:0.46, fontSize:22, bold:true, color:C.black, align:'center' })
+    txt(m.label, { x:mx+0.08, y:my+0.58, w:mColW-0.16, h:0.22, fontSize:10, color:'888888', align:'center' })
   })
 
   // ─── Vertical divider ───────────────────────────────────────────────────
@@ -695,18 +837,24 @@ function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate, not
   const rX = 6.80, rW = 6.30
 
   txt(fund.grossMOIC != null ? fmtX(fund.grossMOIC) : '—', {
-    x:rX, y:1.10, w:rW, h:0.70, fontSize:48, bold:true, color:C.black, align:'center',
+    x:rX, y:1.10, w:rW, h:0.50, fontSize:22, bold:true, color:C.black, align:'center',
   })
-  txt('Gross MOIC', { x:rX, y:1.83, w:rW, h:0.26, fontSize:13, color:'888888', align:'center' })
+  txt('Gross MOIC', { x:rX, y:1.62, w:rW, h:0.26, fontSize:13, color:'888888', align:'center' })
 
-  // Legend
-  const legY = 2.22
-  const legItems = [{ label:'Invested Capital', color:C.textMid }, { label:'NAV', color:C.teal }, { label:'Realized Value', color:'F37D44' }]
-  let legX = rX + 0.30
+  // Legend — tight group, centered as a unit within rW
+  const legY = 2.10
+  const legItems = [
+    { label:'Invested Capital', color:C.textMid, tw:1.20 },
+    { label:'NAV',              color:C.teal,    tw:0.50 },
+    { label:'Realized Value',   color:'D4CDBC',  tw:1.10 },
+  ]
+  const dotW = 0.14, dotGap = 0.05, interGap = 0.35
+  const totalLegW = legItems.reduce((s, li) => s + dotW + dotGap + li.tw, 0) + interGap * (legItems.length - 1)
+  let legX = rX + (rW - totalLegW) / 2
   for (const li of legItems) {
-    slide.addShape(pptx.ShapeType.ellipse, { x:legX, y:legY+0.05, w:0.14, h:0.14, fill:{color:li.color}, line:{type:'none'} })
-    txt(li.label, { x:legX+0.19, y:legY, w:1.70, h:0.24, fontSize:9, color:C.black })
-    legX += 1.90
+    slide.addShape(pptx.ShapeType.ellipse, { x:legX, y:legY+0.05, w:dotW, h:dotW, fill:{color:li.color}, line:{type:'none'} })
+    txt(li.label, { x:legX+dotW+dotGap, y:legY, w:li.tw, h:0.24, fontSize:9, color:C.black })
+    legX += dotW + dotGap + li.tw + interGap
   }
 
   // Bar chart
@@ -729,7 +877,7 @@ function buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate, not
 
   slide.addShape(pptx.ShapeType.line, { x:rX, y:chartAxisY, w:rW, h:0, line:{color:'D0D0D0', width:0.75} })
 
-  slide.addShape(pptx.ShapeType.line, { x:0.15, y:7.42, w:13.0, h:0, line:{color:C.teal, width:1.5} })
+  slide.addShape(pptx.ShapeType.rect, { x:0, y:7.38, w:13.333, h:0.12, fill:{color:'7AC4BD'}, line:{type:'none'} })
 }
 
 // ─── SOI slide (Schedule of Investments) ─────────────────────────────────────
@@ -752,20 +900,20 @@ function buildSOISlide(pptx, fund, soiRows, quarter, reportingDate) {
   slide.addShape(pptx.ShapeType.line, { x:10.20, y:0.26, w:0, h:0.52, line:{color:C.border, width:0.75} })
   txt(fund.group, { x:10.30, y:0.30, w:1.50, h:0.30, fontSize:13, bold:true, color:C.black, align:'center' })
   txt(fmtDate(reportingDate), { x:11.50, y:0.30, w:1.65, h:0.30, fontSize:11, color:C.black, align:'right' })
-  slide.addShape(pptx.ShapeType.line, { x:0.15, y:0.90, w:13.0, h:0, line:{color:C.teal, width:1.5} })
+  slide.addShape(pptx.ShapeType.line, { x:0.15, y:0.90, w:13.0, h:0, line:{color:'005151', width:1.5} })
 
   // ─── Table ───────────────────────────────────────────────────────────────
   // 13 columns totaling 12.83"
   const cols = [
-    { key:'name',       label:'Category (Controlled/Non-C, FI)', w:2.07, align:'left'  },
+    { key:'name',       label:'Category (Controlled/Non-C, FI)', w:1.97, align:'left'  },
     { key:'industry',   label:'Description',                     w:1.60, align:'left'  },
-    { key:'vintage',    label:'Vintage',                         w:0.62, align:'left'  },
+    { key:'vintage',    label:'Vintage',                         w:0.72, align:'left'  },
     { key:'status',     label:'Status',                          w:0.80, align:'left'  },
     { key:'invest',     label:'Invested Capital',                w:0.92, align:'right' },
-    { key:'commit',     label:'Commitment',                      w:0.88, align:'right' },
-    { key:'remain',     label:'Remaining',                       w:0.78, align:'right' },
+    { key:'commit',     label:'Commitment',                      w:0.98, align:'right', dim:true },
+    { key:'remain',     label:'Remaining',                       w:0.78, align:'right', dim:true },
     { key:'realized',   label:'Realized Value',                  w:0.88, align:'right' },
-    { key:'nav',        label:'NAV',                             w:0.88, align:'right' },
+    { key:'nav',        label:'NAV',                             w:0.78, align:'right' },
     { key:'totalValue', label:'Total Value',                     w:0.92, align:'right' },
     { key:'grossDPI',   label:'Gross DPI',                       w:0.80, align:'right' },
     { key:'grossMOIC',  label:'Gross MOIC',                      w:0.88, align:'right', bold:true },
@@ -781,19 +929,27 @@ function buildSOISlide(pptx, fund, soiRows, quarter, reportingDate) {
 
   // Column header row
   slide.addShape(pptx.ShapeType.rect, { x:startX, y, w:tableW, h:headerH, fill:{color:C.colHeaderBg}, line:{type:'none'} })
+  for (const c of cols.filter(c => c.dim)) {
+    slide.addShape(pptx.ShapeType.rect, { x:c.x, y, w:c.w, h:headerH, fill:{color:C.border}, line:{type:'none'} })
+  }
   for (const c of cols) {
-    txt(c.label, { x:c.x+0.04, y:y+0.02, w:c.w-0.08, h:headerH-0.04, fontSize:7.5, bold:true, color:C.colHeaderTxt, align:c.align, valign:'middle' })
+    txt(c.label, { x:c.x+0.04, y:y+0.02, w:c.w-0.08, h:headerH-0.04, fontSize:7.0, bold:true, color:c.dim ? C.textMid : C.colHeaderTxt, align:c.align, valign:'middle' })
   }
   y += headerH
 
   function drawRow(values, opts) {
     const { bg, color=C.text, bold=false, height=rowH, fontSize=8 } = opts
     slide.addShape(pptx.ShapeType.rect, { x:startX, y, w:tableW, h:height, fill:{color:bg}, line:{type:'none'} })
+    if (color === C.white) {
+      for (const c of cols.filter(c => c.dim)) {
+        slide.addShape(pptx.ShapeType.rect, { x:c.x, y, w:c.w, h:height, fill:{color:C.border}, line:{type:'none'} })
+      }
+    }
     for (let i = 0; i < cols.length; i++) {
       const c = cols[i], v = values[i]
       if (v == null || v === '') continue
       const isStatus = c.key === 'status'
-      const fc = (isStatus && v === 'Unrealized') ? C.teal : color
+      const fc = (isStatus && v === 'Unrealized') ? C.teal : (c.dim && color === C.white) ? C.text : color
       txt(v, { x:c.x+0.04, y:y+0.01, w:c.w-0.08, h:height-0.02, fontSize, bold: bold || c.bold, color:fc, align:c.align, valign:'middle', italic: isStatus })
     }
     y += height
@@ -862,9 +1018,9 @@ function buildSOISlide(pptx, fund, soiRows, quarter, reportingDate) {
     if (c.key === 'grossDPI')   return fmtX0(totI > 0 ? totReal / totI : null)
     if (c.key === 'grossMOIC')  return fmtX0(totI > 0 ? totTV   / totI : null)
     return ''
-  }), { bg:C.totalBar, color:C.white, bold:true, height:0.26, fontSize:8.5 })
+  }), { bg:C.teal, color:C.white, bold:true, height:0.26, fontSize:8.5 })
 
-  slide.addShape(pptx.ShapeType.line, { x:0.15, y:7.42, w:13.0, h:0, line:{color:C.teal, width:1.5} })
+  slide.addShape(pptx.ShapeType.rect, { x:0, y:7.38, w:13.333, h:0.12, fill:{color:'7AC4BD'}, line:{type:'none'} })
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -880,16 +1036,17 @@ pptx.author = 'Mubadala Capital'
 pptx.defaultFontFace = 'D-DIN'
 
 buildAllFundsSlide(pptx, funds, quarter, reportingDate)
+buildAllFundsBreakdownSlide(pptx, funds, quarter, reportingDate)
 
-const helios = funds.find(f => f.id === 'MC-PE-4')
-if (helios) {
-  const heliosDetail  = getFundDetailData('MC-PE-4', reportingDate)
-  const heliosSoiRows = loadSOIRows('MC-PE-4', reportingDate)
-  const heliosNote    = resolveNote(loadNote('MC-PE-4'), helios, heliosSoiRows, reportingDate)
-  buildFundOverviewSlide(pptx, helios, heliosSoiRows, quarter, reportingDate, heliosNote)  // Slide 2: Fund Detail
-  buildFundDetailSlide(pptx, helios, heliosDetail, quarter, reportingDate)     // Slide 3: Capital
-  buildSOISlide(pptx, helios, heliosSoiRows, quarter, reportingDate)           // Slide 4: SOI
-  console.log(`✓ Helios IV slides built (${heliosSoiRows.length} SOI rows, prev quarter: ${heliosDetail.prevDate ?? 'N/A'})`)
+// Flagship funds in All Funds display order
+for (const fund of funds.filter(f => f.group === 'Flagship')) {
+  const detail  = getFundDetailData(fund.id, reportingDate)
+  const soiRows = loadSOIRows(fund.id, reportingDate)
+  const note    = resolveNote(loadNote(fund.id), fund, soiRows, reportingDate)
+  buildFundOverviewSlide(pptx, fund, soiRows, quarter, reportingDate, note)
+  buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate)
+  if (soiRows.length > 0) buildSOISlide(pptx, fund, soiRows, quarter, reportingDate)
+  console.log(`✓ ${fund.name}: Overview + Capital${soiRows.length > 0 ? ' + SOI' : ''} (${soiRows.length} SOI rows, prev: ${detail.prevDate ?? 'N/A'})`)
 }
 
 const outDir = path.join(ROOT, 'output')
