@@ -9,9 +9,9 @@ MC-Co-O-1,EVOLVE Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for t
 MC-Co-P-1,ORION Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
 MC-Co-P-2,ATLAS Co-I,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
 MC-Co-W-1,EDUCORE,This co-investment has a Gross IRR of [{GROSS_IRR}]% for the period ending [{Reporting Month}] [{Reporting Year}].
-MC-PE-1,ARC I,"MDC I has invested $[{total_invested}] billion in [{num_investee}] portfolio investments including: 15 Fund Investments, 14 Non-Controlled Investments and One Controlled Investment.
+MC-PE-1,ARC I,"MDC I has invested $[{total_invested}] billion in 30 portfolio investments including: 15 Fund Investments, 14 Non-Controlled Investments and One Controlled Investment.
 
-The Fund portfolios have generated $[{Realizations}] billion in realizations and have a remaining NAV of $[{NAV}] million as
+The Fund portfolios have generated $[{Distributions}] billion in realizations and have a remaining NAV of $[{NAV}] million as
 of [{Reporting Month}] [{Reporting Day}], [{Reporting Year}], representing a Gross DPI of [{GROSS_DPI}]x, a net MOIC of [{NET_MOIC}]x and net IRR of [{NET_IRR}]%. ?
 
 One Controlled Investment, six Non-Controlled Investments and all 15 Fund Investments have been fully realized generating aggregate proceeds of $[{Distributions}] billion vs invested capital for those realized investments of $2.1 billion, which equates to a net DPI of [{NET_DPI}]x."

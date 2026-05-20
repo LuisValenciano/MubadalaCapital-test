@@ -265,6 +265,43 @@ function loadSOIRows(fundId, date) {
       grossIRR: toNum(r['IRR']) * 100,
     })
   }
+  for (const r of parseCSV('SOI CIV Direct.csv').filter(r => r['MC2025Q1FundID'] === fundId && r['Reporting Date'] === date)) {
+    const ti = toNum(r['Investments'])
+    const nav = toNum(r['Current Valuation'])
+    const real = toNum(r['Total Income']) + toNum(r['Proceeds'])
+    const tv = toNum(r['Total Value'])
+    rows.push({
+      category: r['Investment Category'],
+      name: r['Short Name'] || r['Investee'],
+      industry: cleanInd(r['Industry']),
+      vintage: r['Vintage'],
+      status: nav > 0 ? 'Unrealized' : 'Realized',
+      investments: ti, nav, realized: real, totalValue: tv,
+      commitment: null, remaining: null,
+      grossDPI: ti > 0 ? real / ti : 0,
+      grossMOIC: toNum(r['Multiple']),
+      grossIRR: toNum(r['Gross IRR']) * 100,
+    })
+  }
+  for (const r of parseCSV('SOI CIV Fund.csv').filter(r => r['MC2025Q1FundID'] === fundId && r['Reporting Date'] === date)) {
+    const ti = toNum(r['Total Called'])
+    const nav = toNum(r['Adjusted NAV'])
+    const real = toNum(r['Realized'])
+    const tv = nav + real
+    rows.push({
+      category: r['Investment Category'],
+      name: r['Short Name'] || r['Investee'],
+      industry: cleanInd(r['Sector Focus'] || r['Industry'] || ''),
+      vintage: r['Vintage'],
+      status: nav > 0 ? 'Unrealized' : 'Realized',
+      investments: ti, nav, realized: real, totalValue: tv,
+      commitment: toNum(r['Commitment']),
+      remaining: toNum(r['Remaining Commitment']),
+      grossDPI: ti > 0 ? real / ti : 0,
+      grossMOIC: toNum(r['Multiple']),
+      grossIRR: toNum(r['IRR']) * 100,
+    })
+  }
   return rows
 }
 
@@ -298,7 +335,7 @@ function resolveNote(template, fund, soiRows, reportingDate) {
     .replace(/\[\{NET_DPI\}\]/g,   fund.netDPI    != null ? fund.netDPI.toFixed(2)    : '—')
     .replace(/\[\{Realizations\}\]/g,  realM.toFixed(0))
     .replace(/\[\{NAV\}\]/g,           Math.round(fund.adjustedNAV))
-    .replace(/\[\{Total_Value\}\]/g,   Math.round(fund.totalValue).toLocaleString('en-US'))
+    .replace(/\[\{Total_Value\}\]/g,   (fund.totalValue / 1000).toFixed(2))
     .replace(/\[\{Distributions\}\]/g, (fund.distributed / 1000).toFixed(1))
     .replace(/\r\n/g, '\n')
     .replace(/\n\n+/g, '§')   // protect paragraph breaks
@@ -538,7 +575,7 @@ function buildAllFundsBreakdownSlide(pptx, funds, quarter, reportingDate) {
     { key:'fundSize',    label:'Fund Size',    w:0.85, align:'right', fmt },
     { key:'thirdParty',  label:'Third Party',  w:0.72, align:'right', fmt, dim:true },
     { key:'mic',         label:'MIC',          w:0.52, align:'right', fmt, dim:true },
-    { key:'mc',          label:'MC',           w:0.52, align:'right', fmt, dim:true },
+    { key:'mc',          label:'MC',           w:0.65, align:'right', fmt, dim:true },
     { key:'solutions',   label:'Solutions',    w:0.75, align:'right', fmt, dim:true },
     { key:'totalCalled', label:'Total Called', w:0.85, align:'right', fmt },
     { key:'distributed', label:'Distributed',  w:0.75, align:'right', fmt },
@@ -546,7 +583,7 @@ function buildAllFundsBreakdownSlide(pptx, funds, quarter, reportingDate) {
     { key:'totalValue',  label:'Total Value',  w:0.80, align:'right', fmt, bold:true },
     { key:'netDPI',      label:'Net DPI',      w:0.68, align:'right', fmt: fmtX },
     { key:'netMOIC',     label:'Net MOIC',     w:0.75, align:'right', fmt: fmtX, bold:true },
-    { key:'netIRR',      label:'Net IRR',      w:0.68, align:'right', fmt: fmtP },
+    { key:'netIRR',      label:'Net IRR',      w:0.55, align:'right', fmt: fmtP },
     { key:'grossDPI',    label:'Gross DPI',    w:0.68, align:'right', fmt: fmtX },
     { key:'grossMOIC',   label:'Gross MOIC',   w:0.78, align:'right', fmt: fmtX, bold:true },
     { key:'grossIRR',    label:'Gross IRR',    w:0.60, align:'right', fmt: fmtP },
@@ -676,7 +713,7 @@ function buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate) {
   // ─── Chart 1: Capital Activity ──────────────────────────────────────────
   const c1X = 0.25, c1Y = 1.10, c1W = 5.75
   const unusedVal = Math.max(remaining, 0)
-  const barAreaH1 = axisY - (c1Y + 1.10)
+  const barAreaH1 = (axisY - (c1Y + 1.10)) * 0.75
   const maxV1 = Math.max(commitment, called, distributed, unusedVal, 1)
   const scaleH1 = v => (v / maxV1) * barAreaH1
 
@@ -724,8 +761,11 @@ function buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate) {
   const pnl = (navCurr - navPrev) - deltaCalled - deltaDist
 
   const c2X = 6.50, c2Y = 1.10, c2W = 6.60
-  const barAreaH2 = axisY - (c2Y + 0.75)
-  const maxV2 = Math.max(navPrev, navCurr, 1)
+  const chartTop2 = c2Y + 0.75
+  const barAreaH2 = axisY - chartTop2
+  // Peak = navPrev + sum of all positive intermediate bars (to prevent overflow when they stack above navPrev)
+  const peakValue = navPrev + [deltaCalled, deltaDist, pnl].reduce((s, v) => s + Math.max(0, v), 0)
+  const maxV2 = Math.max(navPrev, navCurr, peakValue, 1)
   const scaleH2 = v => (Math.abs(v) / maxV2) * barAreaH2
 
   txt("Partner's Capital Evolution – QTD", { x:c2X, y:c2Y, w:c2W, h:0.35, fontSize:16, bold:true, color:C.teal })
@@ -762,7 +802,8 @@ function buildFundDetailSlide(pptx, fund, detail, quarter, reportingDate) {
     drawBar(bx, bh, by, barW2, b.color)
     const absVal = Math.abs(b.value)
     const valStr = absVal < 0.5 ? '0' : `${b.value < 0 ? '(' : ''}${Math.round(absVal).toLocaleString('en-US')}${b.value < 0 ? ')' : ''}`
-    txt(valStr, { x:bx-0.20, y:by-0.23, w:barW2+0.40, h:0.22, fontSize:9, color:C.black, align:'center' })
+    const labelY = Math.max(by - 0.23, chartTop2 + 0.02)
+    txt(valStr, { x:bx-0.20, y:labelY, w:barW2+0.40, h:0.22, fontSize:9, color:C.black, align:'center' })
     txt(b.label, { x:bx-0.25, y:axisY+0.06, w:barW2+0.50, h:0.22, fontSize:8, color:C.black, align:'center' })
     if (i < wfBars.length - 1) connectors.push({ x1:bx+barW2, x2:barXs2[i+1], y:accY })
   })
@@ -1038,8 +1079,9 @@ pptx.defaultFontFace = 'D-DIN'
 buildAllFundsSlide(pptx, funds, quarter, reportingDate)
 buildAllFundsBreakdownSlide(pptx, funds, quarter, reportingDate)
 
-// Flagship funds in All Funds display order
-for (const fund of funds.filter(f => f.group === 'Flagship')) {
+// All funds shown in the All Funds slide (Flagship, Continuation, Co-Investment only)
+const allFundsGroups = new Set(['Flagship', 'Continuation', 'Co-Investment'])
+for (const fund of funds.filter(f => allFundsGroups.has(f.group))) {
   const detail  = getFundDetailData(fund.id, reportingDate)
   const soiRows = loadSOIRows(fund.id, reportingDate)
   const note    = resolveNote(loadNote(fund.id), fund, soiRows, reportingDate)
